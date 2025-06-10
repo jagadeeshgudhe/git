@@ -8,6 +8,112 @@ import "../../styles/chat/ChatBot.css";
 const API_URL = '/api/QA';  // This will be proxied by Vite
 const API_KEY = 'AIzaSyCR7AMuBCl2zj8wwX_xGxVGm6pWkA2vha';
 
+// Format the API response into a structured message
+const formatResponse = (data) => {
+  const response = {
+    text: data.answer || "I apologize, but I couldn't find a specific answer to your question.",
+    sources: [],
+    relatedQuestions: []
+  };
+
+  // Add sources if available
+  if (data.sources && Array.isArray(data.sources)) {
+    response.sources = data.sources.map(source => ({
+      name: source.title || source.name || 'Policy Document',
+      url: source.url || '#'
+    }));
+  }
+
+  // Add related questions if available
+  if (data.relatedQuestions && Array.isArray(data.relatedQuestions)) {
+    response.relatedQuestions = data.relatedQuestions;
+  }
+
+  return response;
+};
+
+// Format the response text into the exact requested structure
+const formatStructuredResponse = (text, sources = []) => {
+  // Extract the policy title and document name
+  const titleMatch = text.match(/(.*?)\s*\((.*?)\)/);
+  if (!titleMatch) return text;
+
+  const [, title, docName] = titleMatch;
+  let formattedText = `<div style="font-family: 'Times New Roman', Times, serif;">
+<strong>${title}</strong>
+(${docName})
+
+`;
+
+  // Split content into sections by asterisk and bold headers
+  const sections = text.split(/\*\s*\*\*/).filter(Boolean);
+
+  sections.forEach(section => {
+    if (!section.includes(':')) return;
+
+    // Extract heading and content
+    let [heading, ...content] = section.split(':');
+    heading = heading.replace(/\*\*/g, '').trim();
+    content = content.join(':').trim();
+
+    if (!heading) return;
+
+    // Format main heading
+    formattedText += `<strong>${heading}</strong>\n`;
+
+    // Handle nested sections
+    if (content.includes('*')) {
+      const subSections = content.split('*').filter(Boolean);
+      let paragraphContent = '';
+      
+      subSections.forEach(subSection => {
+        const trimmedSection = subSection.trim();
+        if (trimmedSection.includes(':')) {
+          // This is a sub-heading
+          const [subHeading, subContent] = trimmedSection.split(':').map(s => s.trim());
+          if (paragraphContent) {
+            formattedText += paragraphContent + '\n\n';
+            paragraphContent = '';
+          }
+          formattedText += `<strong>${subHeading}</strong>: `;
+          
+          // Format sub-content as paragraph
+          if (subContent) {
+            const points = subContent.split('*')
+              .filter(Boolean)
+              .map(point => point.trim())
+              .filter(point => point)
+              .join('. ');
+            formattedText += points + '\n\n';
+          }
+        } else if (trimmedSection) {
+          // Add to paragraph content
+          if (paragraphContent) {
+            paragraphContent += '. ';
+          }
+          paragraphContent += trimmedSection.replace(/\*\*/g, '');
+        }
+      });
+      
+      if (paragraphContent) {
+        formattedText += paragraphContent + '\n\n';
+      }
+    } else if (content) {
+      // Single level content as paragraph
+      formattedText += content.replace(/\*\*/g, '') + '\n\n';
+    }
+  });
+
+  // Add document URL if present
+  const urlMatch = text.match(/Document URL:\s*(\S+)/);
+  if (urlMatch) {
+    formattedText += `<strong>Document URL</strong>\n${urlMatch[1]}\n`;
+  }
+
+  formattedText += '</div>';
+  return formattedText;
+};
+
 const INITIAL_MESSAGE = {
   text: "👋 Hi! I'm your HR Assistant. How can I help you today?",
   sender: "bot",
@@ -47,6 +153,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState("");
   const [isBotTyping, setIsBotTyping] = useState(false);
+  const [isUserTyping, setIsUserTyping] = useState(false);
   const [isError, setIsError] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -56,14 +163,12 @@ const ChatBot = ({ onClose, onMinimize }) => {
   const [editingMessageId, setEditingMessageId] = useState(null);
   const [editText, setEditText] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [chatHistory, setChatHistory] = useState(() => {
-    const savedHistory = localStorage.getItem('chatHistory');
-    return savedHistory ? JSON.parse(savedHistory) : [];
-  });
+  const { chatHistory, addToHistory, clearHistory } = useChat();
   const [historicalData, setHistoricalData] = useState(() => {
     const savedHistoricalData = localStorage.getItem('historicalChatData');
     return savedHistoricalData ? JSON.parse(savedHistoricalData) : [];
   });
+  const typingTimeoutRef = useRef(null);
 
   const scrollToBottom = (force = false) => {
     if (shouldAutoScroll || force) {
@@ -148,156 +253,21 @@ const ChatBot = ({ onClose, onMinimize }) => {
     return () => clearTimeout(midnightTimeout);
   }, []);
 
-  // Add to history with timestamp
-  const addToHistory = (question, answer) => {
-    const historyItem = {
-      question,
-      answer,
-      timestamp: new Date().toISOString(),
-      displayTime: new Date().toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        month: 'short',
-        day: 'numeric'
-      })
-    };
-    setChatHistory(prev => [...prev, historyItem]);
-  };
-
-  const formatResponse = (data) => {
-    const response = {
-      text: data.answer,
-      sources: [],
-      suggestions: []
-    };
-
-    // Find relevant policy documents based on the category
-    const category = determineCategory(data.answer);
-    const relevantPolicy = hrPoliciesData.policies.find(policy => 
-      policy.name.toLowerCase() === category.toLowerCase()
-    );
-
-    // Add source if found
-    if (relevantPolicy) {
-      response.sources = [{
-        name: relevantPolicy.name,
-        url: relevantPolicy.documentUrl
-      }];
+  const handleInputChange = (e) => {
+    setInputText(e.target.value);
+    
+    // Clear any existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
     }
 
-    return response;
-  };
+    // Set user as typing
+    setIsUserTyping(true);
 
-  const determineCategory = (text) => {
-    const lowerText = text.toLowerCase();
-    
-    // Create a scoring system for each category
-    const scores = {
-      'Dress Code and Hygiene': 0,
-      'Leave Management': 0,
-      'Captive Allowance': 0,
-      'Non-Standard Working Hours': 0,
-      'Notice Period and Recovery': 0,
-      'Disciplinary Actions': 0
-    };
-
-    // Keywords for each category
-    const categoryKeywords = {
-      'Dress Code and Hygiene': ['dress code', 'attire', 'clothing', 'wear', 'formal', 'casual', 'hygiene', 'footwear', 'shoes', 'appearance', 'grooming', 'outfit', 'suits', 'shirt', 'trousers', 'saree', 'uniform'],
-      'Leave Management': ['leave', 'vacation', 'time off', 'sick', 'maternity', 'paternity', 'absence', 'holiday', 'sabbatical', 'emergency leave'],
-      'Captive Allowance': ['captive', 'allowance', 'compensation', 'benefits', 'payment', 'claim', 'reimbursement'],
-      'Non-Standard Working Hours': ['working hours', 'overtime', 'weekend', 'shift', 'late night', 'flexible', 'schedule', 'timing'],
-      'Notice Period and Recovery': ['notice', 'recovery', 'resignation', 'termination', 'exit', 'leaving', 'last day'],
-      'Disciplinary Actions': ['disciplinary', 'violation', 'warning', 'conduct', 'behavior', 'action', 'misconduct', 'penalty']
-    };
-
-    // Score each category based on keyword matches
-    Object.entries(categoryKeywords).forEach(([category, keywords]) => {
-      keywords.forEach(keyword => {
-        if (lowerText.includes(keyword.toLowerCase())) {
-          scores[category] += 1;
-        }
-      });
-    });
-
-    // Find category with highest score
-    const maxScore = Math.max(...Object.values(scores));
-    const matchedCategory = Object.entries(scores).find(([_, score]) => score === maxScore)?.[0];
-
-    // Return matched category if score > 0, otherwise return 'General'
-    return maxScore > 0 ? matchedCategory : 'General';
-  };
-
-  const formatMessageContent = (text) => {
-    // Split the text and document URL if present
-    const urlMatch = text.match(/Document URL: (https?:\/\/[^\s]+)/);
-    const documentUrl = urlMatch ? urlMatch[1] : null;
-    const messageText = urlMatch ? text.replace(/Document URL: https?:\/\/[^\s]+/, '').trim() : text;
-
-    return { messageText, documentUrl };
-  };
-
-  const formatStructuredResponse = (text, query) => {
-    // Add the response template structure
-    const responseTemplate = `${text}
-
-## Related Questions
-- What are the recent updates to HR policies?
-- How do these policies affect remote workers?
-- What is the policy implementation timeline?`;
-
-    // Convert the text to HTML format with proper structure
-    const formattedText = responseTemplate
-      .split('\n')
-      .map(line => {
-        if (line.startsWith('# ')) {
-          return `<h1 class="response-main-heading">${line.substring(2)}</h1>`;
-        } else if (line.startsWith('## ')) {
-          return `<h2 class="response-subheading">${line.substring(3)}</h2>`;
-        } else if (line.startsWith('### ')) {
-          return `<h3 class="response-subheading-2">${line.substring(4)}</h3>`;
-        } else if (line.startsWith('- ')) {
-          return `<li class="response-list-item">${line.substring(2)}</li>`;
-        } else if (line.startsWith('* ')) {
-          return `<li class="response-list-item">${line.substring(2)}</li>`;
-        } else if (line.trim().startsWith('|')) {
-          // Table row handling
-          const cells = line.trim().split('|').filter(cell => cell.trim());
-          const isHeader = cells.every(cell => cell.includes('---'));
-          if (isHeader) {
-            return ''; // Skip separator row
-          }
-          const isFirstRow = !cells.some(cell => cell.includes('---'));
-          if (isFirstRow) {
-            return `<tr class="table-header">${cells.map(cell => `<th>${cell.trim()}</th>`).join('')}</tr>`;
-          }
-          return `<tr>${cells.map(cell => `<td>${cell.trim()}</td>`).join('')}</tr>`;
-        } else if (line.trim() === '') {
-          return '</ul><br/>'; // Close list if empty line
-        } else {
-          return `<p class="response-paragraph">${line}</p>`;
-        }
-      })
-      .join('\n');
-
-    // Wrap lists properly
-    const wrappedText = formattedText
-      .replace(/<li>/g, '<ul class="response-list"><li>')
-      .replace(/<\/li>\s*<br\/>/g, '</li></ul>')
-      .replace(/<\/li>\s*<p>/g, '</li></ul><p>')
-      .replace(/<\/p>\s*<li>/g, '</p><ul class="response-list"><li>');
-
-    // Wrap tables properly
-    const finalText = wrappedText
-      .replace(/<tr class="table-header">/g, '<table class="response-table"><thead><tr>')
-      .replace(/<\/tr>\s*<tr>/g, '</tr></thead><tbody><tr>')
-      .replace(/<\/tr>\s*<p>/g, '</tr></tbody></table><p>')
-      .replace(/<\/tr>\s*<h/g, '</tr></tbody></table><h');
-
-    return `<div class="structured-response">
-      ${finalText}
-    </div>`;
+    // Set a timeout to clear the typing indicator
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsUserTyping(false);
+    }, 1000);
   };
 
   const handleSendMessage = async (e, messageText = null) => {
@@ -354,7 +324,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
         });
         throw new Error(`API error: ${response.status} - ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('API Response:', data); // Debug log
 
@@ -364,7 +334,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
       }
 
       const formattedResponse = formatResponse(data);
-      const structuredText = formatStructuredResponse(formattedResponse.text, textToSend);
+      const structuredText = formatStructuredResponse(formattedResponse.text, formattedResponse.sources);
 
       const botMessage = {
         text: structuredText,
@@ -376,7 +346,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
         }),
         isNew: true,
         sources: formattedResponse.sources,
-        relatedQuestions: formattedResponse.suggestions || []
+        relatedQuestions: formattedResponse.relatedQuestions || []
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -698,7 +668,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
               key={index} 
               className={`message ${message.sender} ${message.isNew ? 'new' : ''} ${message.isError ? 'error' : ''}`}
             >
-              <div className={`message-icon ${message.sender === 'bot' && message.isNew ? 'speaking' : ''}`}>
+              <div className={`message-icon ${message.sender} ${message.isNew ? 'speaking' : ''}`}>
                 {message.sender === "bot" ? (
                   <div className="bot-avatar-container">
                     <img
@@ -706,13 +676,6 @@ const ChatBot = ({ onClose, onMinimize }) => {
                       alt="Bot avatar"
                       className="icon"
                     />
-                    {message.isNew && (
-                      <div className="sound-waves">
-                        <div className="wave wave1"></div>
-                        <div className="wave wave2"></div>
-                        <div className="wave wave3"></div>
-                      </div>
-                    )}
                   </div>
                 ) : (
                   <svg
@@ -865,6 +828,30 @@ const ChatBot = ({ onClose, onMinimize }) => {
               </div>
             </div>
           )}
+          {isUserTyping && (
+            <div className="message user typing">
+              <div className="message-bubble">
+                <div className="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+              <div className="message-icon">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="icon"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <circle cx="12" cy="7" r="4" />
+                  <path d="M5.5 21h13a2 2 0 002-2v-1a6 6 0 00-6-6h-5a6 6 0 00-6 6v1a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} className="message-anchor" />
         </div>
 
@@ -889,7 +876,8 @@ const ChatBot = ({ onClose, onMinimize }) => {
             type="text"
             placeholder="Type your message here..."
             value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            onChange={handleInputChange}
+            onBlur={() => setIsUserTyping(false)}
             autoFocus
             spellCheck="false"
             maxLength={300}
