@@ -232,7 +232,9 @@ const ChatBot = ({ onClose, onMinimize }) => {
         
         // Update current history to only include today's chats
         localStorage.setItem('chatHistory', JSON.stringify(todayChats));
-        setChatHistory(todayChats);
+        clearHistory(); // Clear context history
+        // Optionally, you can add today's chats back if needed
+        // But context will reload from localStorage on next mount
       }
     };
 
