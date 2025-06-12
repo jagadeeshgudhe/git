@@ -8,6 +8,7 @@ import "../../styles/chat/ChatBot.css";
 const API_URL = '/api/QA';  // This will be proxied by Vite
 const API_KEY = 'AIzaSyCR7AMuBCl2zj8wwX_xGxVGm6pWkA2vha';
 
+
 // Format the API response into a structured message
 const formatResponse = (data) => {
   const response = {
@@ -350,7 +351,20 @@ const ChatBot = ({ onClose, onMinimize }) => {
       };
 
       setMessages(prev => [...prev, botMessage]);
-      addToHistory(textToSend, structuredText);
+      // Strip HTML tags and store clean text in history
+      const stripHtml = (html) => {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        return temp.textContent || temp.innerText || '';
+      };
+
+      addToHistory({
+        text: textToSend,
+        timestamp: userMessage.timestamp
+      }, {
+        text: stripHtml(structuredText),
+        timestamp: botMessage.timestamp
+      });
     } catch (error) {
       console.error('Error details:', {
         message: error.message,
@@ -358,6 +372,8 @@ const ChatBot = ({ onClose, onMinimize }) => {
         name: error.name
       });
       setIsError(true);
+
+      
       
       let errorMessage = "I apologize, but I'm having trouble connecting to the server. ";
       
@@ -376,6 +392,8 @@ const ChatBot = ({ onClose, onMinimize }) => {
       } else {
         errorMessage += `Error: ${error.message}. Please try again later or contact support if the issue persists.`;
       }
+
+
 
       const botErrorMessage = {
         text: errorMessage,
@@ -470,6 +488,24 @@ const ChatBot = ({ onClose, onMinimize }) => {
       };
 
       setMessages(prev => [...prev, botMessage]);
+      // Strip HTML tags and store clean text in history
+      const stripHtml = (html) => {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        return temp.textContent || temp.innerText || '';
+      };
+
+      addToHistory({
+        text: editText.trim(),
+        timestamp: new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })
+      }, {
+        text: stripHtml(formattedResponse.text),
+        timestamp: botMessage.timestamp
+      });
     } catch (error) {
       console.error('Error:', error);
       const errorMessage = {
@@ -505,8 +541,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
   };
 
   const handleClearHistory = () => {
-    setChatHistory([]);
-    localStorage.removeItem('chatHistory');
+    clearHistory();
     setIsHistoryOpen(false);
   };
 

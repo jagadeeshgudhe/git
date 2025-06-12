@@ -29,6 +29,8 @@ export const ChatProvider = ({ children }) => {
       // Limit the history to MAX_HISTORY_ITEMS
       const limitedHistory = chatHistory.slice(-MAX_HISTORY_ITEMS);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(limitedHistory));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
     }
   }, [chatHistory]);
 
@@ -50,8 +52,19 @@ export const ChatProvider = ({ children }) => {
     setIsChatbotMinimized(false);
   };
 
-  const addToHistory = (message) => {
-    setChatHistory(prev => [...prev, { ...message, timestamp: new Date().toISOString() }]);
+  const addToHistory = (userMessage, botMessage) => {
+    const historyItem = {
+      timestamp: new Date().toISOString(),
+      userMessage: {
+        text: userMessage.text,
+        timestamp: userMessage.timestamp
+      },
+      botMessage: {
+        text: botMessage.text,
+        timestamp: botMessage.timestamp
+      }
+    };
+    setChatHistory(prev => [...prev, historyItem]);
   };
 
   const clearHistory = () => {
