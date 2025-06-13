@@ -4,6 +4,7 @@ import { useChat } from "../../context/ChatContext";
 import Suggestions from "./Suggestions";
 import HistoryPanel from "./HistoryPanel";
 import "../../styles/chat/ChatBot.css";
+import { categorySuggestions } from '../../data/categorySuggestions';
 
 const API_URL = '/api/QA';  // This will be proxied by Vite
 const API_KEY = 'AIzaSyCR7AMuBCl2zj8wwX_xGxVGm6pWkA2vha';
@@ -149,6 +150,19 @@ const VirtualAssistanceButton = ({ onClick }) => {
     </button>
   );
 };
+
+// Add a function to detect the category from the answer text
+function detectCategory(answerText) {
+  if (!answerText) return 'General';
+  const lower = answerText.toLowerCase();
+  if (lower.includes('leave')) return 'Leave Management';
+  if (lower.includes('captive allowance')) return 'Captive Allowance';
+  if (lower.includes('non-standard working hours')) return 'Non-Standard Working Hours';
+  if (lower.includes('notice period')) return 'Notice Period and Recovery';
+  if (lower.includes('disciplinary')) return 'Disciplinary Actions';
+  if (lower.includes('dress') || lower.includes('hygiene')) return 'Dress Code and Hygiene';
+  return 'General';
+}
 
 const ChatBot = ({ onClose, onMinimize }) => {
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
@@ -339,6 +353,9 @@ const ChatBot = ({ onClose, onMinimize }) => {
       const formattedResponse = formatResponse(data);
       const structuredText = formatStructuredResponse(formattedResponse.text, formattedResponse.sources);
 
+      // Detect the category for suggestions
+      const detectedCategory = detectCategory(formattedResponse.text);
+
       const botMessage = {
         text: structuredText,
         sender: "bot",
@@ -349,7 +366,9 @@ const ChatBot = ({ onClose, onMinimize }) => {
         }),
         isNew: true,
         sources: formattedResponse.sources,
-        relatedQuestions: formattedResponse.relatedQuestions || []
+        relatedQuestions: formattedResponse.relatedQuestions || [],
+        category: detectedCategory,
+        suggestions: categorySuggestions[detectedCategory]
       };
 
       setMessages(prev => [...prev, botMessage]);
