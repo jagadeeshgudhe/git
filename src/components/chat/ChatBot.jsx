@@ -351,13 +351,13 @@ const ChatBot = ({ onClose, onMinimize }) => {
       }
 
       const formattedResponse = formatResponse(data);
-      const structuredText = formatStructuredResponse(formattedResponse.text, formattedResponse.sources);
+      const formattedText = formatBotReply(formattedResponse.text);
 
       // Detect the category for suggestions
       const detectedCategory = detectCategory(formattedResponse.text);
 
       const botMessage = {
-        text: structuredText,
+        text: formattedText,
         sender: "bot",
         timestamp: new Date().toLocaleTimeString('en-US', {
           hour: 'numeric',
@@ -383,7 +383,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
         text: textToSend,
         timestamp: userMessage.timestamp
       }, {
-        text: stripHtml(structuredText),
+        text: stripHtml(formattedText),
         timestamp: botMessage.timestamp
       });
     } catch (error) {
@@ -447,6 +447,110 @@ const ChatBot = ({ onClose, onMinimize }) => {
   const handleEditMessage = (index) => {
     setEditingMessageId(index);
     setEditText(messages[index].text);
+  };
+
+  const formatBotReply = (text) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    let result = '';
+    let inList = false;
+    let listItems = [];
+    let currentSection = '';
+
+    const processList = () => {
+      if (listItems.length > 0) {
+        result += `<ul style="padding-left: 1.2rem; margin: 0.5rem 0;">${listItems.join('')}</ul>`;
+        listItems = [];
+      }
+      inList = false;
+    };
+
+    const isHeading = (line) => {
+      // Check for main headings (all caps or starts with #)
+      return (line === line.toUpperCase() && line.length > 3 && !line.includes('http')) ||
+             line.startsWith('#') ||
+             // Check for section headings (ends with :)
+             (line.endsWith(':') && line.length > 3);
+    };
+
+    const isSubHeading = (line) => {
+      // Check for subheadings (bold text or specific patterns)
+      return line.startsWith('**') && line.endsWith('**') ||
+             (line.includes(':') && line.length < 50);
+    };
+
+    lines.forEach(line => {
+      let formattedLine = line.trim();
+
+      if (formattedLine.startsWith('Document URL:')) {
+        processList();
+        const url = formattedLine.replace('Document URL:', '').trim();
+        result += `<div class="document-url" style="margin-top: 1rem; padding: 0.5rem; background: #f5f5f5; border-radius: 4px;">
+          <strong>Document URL:</strong> <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${url}</a>
+        </div>`;
+        return;
+      }
+
+      if (isHeading(formattedLine)) {
+        processList();
+        // Remove # if present
+        formattedLine = formattedLine.replace(/^#+\s*/, '');
+        // Remove trailing colon for main headings
+        formattedLine = formattedLine.replace(/:$/, '');
+        result += `<h3 style="margin: 1.5rem 0 0.5rem 0; font-weight: 600; color: #2c3e50;">${formattedLine}</h3>`;
+        currentSection = formattedLine;
+      } else if (isSubHeading(formattedLine)) {
+        processList();
+        // Remove ** if present
+        formattedLine = formattedLine.replace(/\*\*/g, '');
+        result += `<h4 style="margin: 1rem 0 0.5rem 0; font-weight: 500; color: #34495e;">${formattedLine}</h4>`;
+      } else if (formattedLine.startsWith('•') || formattedLine.startsWith('*') || formattedLine.startsWith('-')) {
+        // Handle bullet points
+        inList = true;
+        formattedLine = formattedLine.replace(/^[•\*\-]\s*/, '');
+        // Replace **bold** with <strong>bold</strong>
+        formattedLine = formattedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Auto-link URLs
+        formattedLine = autoLink(formattedLine);
+        listItems.push(`<li style="margin-bottom: 0.3rem;">${formattedLine}</li>`);
+      } else if (formattedLine.startsWith('➢')) {
+        // Handle special bullet points
+        inList = true;
+        formattedLine = formattedLine.replace(/^➢\s*/, '');
+        formattedLine = formattedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formattedLine = autoLink(formattedLine);
+        listItems.push(`<li style="margin-bottom: 0.3rem; list-style-type: none;">➢ ${formattedLine}</li>`);
+      } else {
+        // Handle regular paragraphs
+        processList();
+        if (formattedLine) {
+          // Replace **bold** with <strong>bold</strong>
+          formattedLine = formattedLine.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+          // Auto-link URLs
+          formattedLine = autoLink(formattedLine);
+          result += `<p style="margin: 0.5rem 0; line-height: 1.5;">${formattedLine}</p>`;
+        }
+      }
+    });
+
+    // Process any remaining list items
+    processList();
+
+    // Wrap the entire content in a styled container
+    return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; color: #333; line-height: 1.6;">
+      ${result}
+    </div>`;
+  };
+
+  const autoLink = (text) => {
+    // URL regex pattern - more precise to avoid matching partial URLs
+    const urlPattern = /(https?:\/\/[^\s<]+)/g;
+    
+    // Replace URLs with anchor tags
+    return text.replace(urlPattern, (url) => {
+      // Clean up URL (remove trailing punctuation)
+      const cleanUrl = url.replace(/[.,;:!?]$/, '');
+      return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: #0066cc; text-decoration: underline;">${cleanUrl}</a>`;
+    });
   };
 
   const handleSaveEdit = async (index) => {
@@ -767,10 +871,8 @@ const ChatBot = ({ onClose, onMinimize }) => {
                   </div>
                 ) : (
                   <>
-                    <div className="message-text">
-                      <div dangerouslySetInnerHTML={{ __html: message.text }} />
-                      {message.isEdited && <span className="edited-tag">(edited)</span>}
-                    </div>
+                    <div className="message-text" dangerouslySetInnerHTML={{ __html: message.text }} />
+                    {message.isEdited && <span className="edited-tag">(edited)</span>}
                     {message.sender === 'user' && (
                       <button 
                         onClick={() => handleEditMessage(index)} 
