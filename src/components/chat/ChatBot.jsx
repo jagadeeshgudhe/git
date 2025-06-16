@@ -117,7 +117,7 @@ const formatStructuredResponse = (text, sources = []) => {
 };
 
 const INITIAL_MESSAGE = {
-  text: "👋 Hi! I'm your HR Assistant. How can I help you today?",
+  text: "Hi, I am your HR Assistant. Please select the country whose HR policies you would like to explore",
   sender: "bot",
   timestamp: new Date().toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -126,8 +126,10 @@ const INITIAL_MESSAGE = {
   }),
   isNew: true,
   sources: [],
-  relatedQuestions: [
-  ]
+  relatedQuestions: [],
+  showCountrySelection: true,
+  hideFeedback: true,
+  hideSuggestions: true
 };
 
 const VirtualAssistanceButton = ({ onClick }) => {
@@ -173,6 +175,7 @@ const ChatBot = ({ onClose, onMinimize }) => {
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const [editingMessageId, setEditingMessageId] = useState(null);
@@ -287,10 +290,76 @@ const ChatBot = ({ onClose, onMinimize }) => {
     }, 1000);
   };
 
+  const handleCountrySelection = (country) => {
+    setSelectedCountry(country);
+    const userMessage = {
+      text: country,
+      sender: "user",
+      timestamp: new Date().toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      }),
+      isNew: true
+    };
+
+    let botResponse;
+    if (country === "🇮🇳 India") {
+      botResponse = {
+        text: "Please enter your query or select the HR policy you want information about",
+        sender: "bot",
+        timestamp: new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }),
+        isNew: true,
+        sources: [],
+        relatedQuestions: [],
+        hideFeedback: true,
+        hideSuggestions: false,
+        suggestions: [
+          "Leave Management Rule",
+          "Captive Allowance",
+          "Dress Code and Personal Hygiene",
+          "Non Standard Working Hours Management Rule",
+          "Notice Period and Recovery Management Rule"
+        ]
+      };
+    } else {
+      botResponse = {
+        text: `Currently, HR policy information for ${country.split(' ')[0]} is not available in this system. We are working to expand our policy database. For now, please contact your local HR representative.`,
+        sender: "bot",
+        timestamp: new Date().toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        }),
+        isNew: true,
+        sources: [],
+        relatedQuestions: [],
+        hideFeedback: true,
+        hideSuggestions: true
+      };
+    }
+
+    setMessages(prev => [...prev, userMessage, botResponse]);
+  };
+
   const handleSendMessage = async (e, messageText = null) => {
     e?.preventDefault();
     const textToSend = messageText || inputText;
     if (!textToSend.trim()) return;
+
+    // If no country is selected, don't process the message
+    if (!selectedCountry) {
+      return;
+    }
+
+    // If country is not India, don't process the message
+    if (selectedCountry !== "🇮🇳 India") {
+      return;
+    }
 
     // Add user message
     const userMessage = {
@@ -872,6 +941,28 @@ const ChatBot = ({ onClose, onMinimize }) => {
                 ) : (
                   <>
                     <div className="message-text" dangerouslySetInnerHTML={{ __html: message.text }} />
+                    {message.showCountrySelection && (
+                      <div className="country-selection">
+                        <button 
+                          onClick={() => handleCountrySelection("🇮🇳 India")}
+                          className="country-btn"
+                        >
+                          🇮🇳 India
+                        </button>
+                        <button 
+                          onClick={() => handleCountrySelection("🇩🇪 Germany")}
+                          className="country-btn"
+                        >
+                          🇩🇪 Germany
+                        </button>
+                        <button 
+                          onClick={() => handleCountrySelection("🇫🇷 France")}
+                          className="country-btn"
+                        >
+                          🇫🇷 France
+                        </button>
+                      </div>
+                    )}
                     {message.isEdited && <span className="edited-tag">(edited)</span>}
                     {message.sender === 'user' && (
                       <button 
@@ -884,83 +975,41 @@ const ChatBot = ({ onClose, onMinimize }) => {
                     )}
                   </>
                 )}
-                {message.sender === 'bot' && !message.isError && (
-                  <div className="message-details">
-                    {message.documentUrl && (
-                      <div className="document-url">
-                        Document URL: <a href={message.documentUrl} target="_blank" rel="noopener noreferrer">{message.documentUrl}</a>
-                      </div>
-                    )}
-                    {message.sources && message.sources.length > 0 && (
-                      <div className="sources">
-                        <h4>Related Policies:</h4>
-                        <ul>
-                          {message.sources.map((source, idx) => (
-                            <li key={idx}>
-                              <a 
-                                href={source.url} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="policy-link"
-                              >
-                                {source.name}
-                              </a>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {message.relatedQuestions && message.relatedQuestions.length > 0 && (
-                      <div className="related-questions">
-                        <h4>You might also want to ask:</h4>
-                        <ul>
-                          {message.relatedQuestions.map((question, idx) => (
-                            <li 
-                              key={idx}
-                              onClick={() => {
-                                setInputText(question);
-                                document.querySelector('.chatbot-input input').focus();
-                              }}
-                              className="related-question"
-                            >
-                              {question}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    <Suggestions
-                      category={message.category}
-                      suggestions={message.suggestions}
-                      onSuggestionClick={(suggestion) => handleSendMessage(null, suggestion)}
-                    />
+                {message.sender === 'bot' && !message.isError && !message.hideFeedback && (
+                  <div className="message-feedback-card">
+                    <div className="feedback-label">Was this helpful?</div>
+                    <div className="message-feedback-icons">
+                      {!message.feedbackSubmitted ? (
+                        <>
+                          <button
+                            className="feedback-btn thumbs-up"
+                            onClick={() => handleFeedback(index, true)}
+                            title="Helpful"
+                          >
+                            👍
+                          </button>
+                          <button
+                            className="feedback-btn thumbs-down"
+                            onClick={() => handleFeedback(index, false)}
+                            title="Not helpful"
+                          >
+                            👎
+                          </button>
+                        </>
+                      ) : (
+                        <span className="feedback-submitted">
+                          {message.feedback ? '👍 Thanks for your feedback!' : '👎 Thanks for your feedback!'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
-                {message.sender === 'bot' && !message.isError && (
-                  <div className="message-feedback">
-                    {!message.feedbackSubmitted ? (
-                      <>
-                        <button
-                          className="feedback-btn"
-                          onClick={() => handleFeedback(index, true)}
-                          title="Helpful"
-                        >
-                          👍
-                        </button>
-                        <button
-                          className="feedback-btn"
-                          onClick={() => handleFeedback(index, false)}
-                          title="Not helpful"
-                        >
-                          👎
-                        </button>
-                      </>
-                    ) : (
-                      <span className="feedback-submitted">
-                        {message.feedback ? '👍 Thanks for your feedback!' : '👎 Thanks for your feedback!'}
-                      </span>
-                    )}
-                  </div>
+                {message.sender === 'bot' && !message.isError && !message.hideSuggestions && (
+                  <Suggestions
+                    category={message.category}
+                    suggestions={message.suggestions}
+                    onSuggestionClick={(suggestion) => handleSendMessage(null, suggestion)}
+                  />
                 )}
                 <div className="message-time">{message.timestamp}</div>
               </div>
