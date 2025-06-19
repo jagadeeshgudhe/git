@@ -6,6 +6,8 @@ import { ChatProvider } from "./context/ChatContext";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import ExportPage from "./pages/ExportPage";
+import AdminHomePage from "./pages/AdminHomePage";
+import AdminRecordsPage from "./pages/AdminRecordsPage";
 
 // Import chat components
 import VirtualAssistanceButton from "./components/chat/VirtualAssistanceButton";
@@ -19,7 +21,9 @@ const App = () => {
       <Router>
         <Routes>
           <Route path="/" element={<AuthPage />} />
-          <Route path="/home" element={<HomePage />} />
+          <Route path="/user" element={<HomePage />} />
+          <Route path="/admin" element={<AdminHomePage />} />
+          <Route path="/admin/records" element={<AdminRecordsPage />} />
           <Route path="/export" element={<ExportPage />} />
         </Routes>
         <VirtualAssistanceButton />

@@ -9,6 +9,10 @@ import "../../styles/layout/Header.css";
 
 const Header = () => {
   const navigate = useNavigate();
+  let user = null;
+  try {
+    user = JSON.parse(localStorage.getItem("loggedInUser"));
+  } catch (e) {}
 
   return (
     <header className="header gradient-header">
@@ -18,18 +22,30 @@ const Header = () => {
           alt="CGI Logo"
           className="logo"
         />
-
+        {user && user.firstName && (
+          <span style={{ marginLeft: 16, fontWeight: 500, color: '#fff', fontSize: 16 }}>
+            Hello, {user.firstName}!
+          </span>
+        )}
         <nav className="nav-links">
-          <Link to="/home" className="nav-link">
+          <Link to="/user" className="nav-link">
             <HomeIcon size={16} /> Home
           </Link>
           <Link to="/export" className="nav-link">
             <Upload size={16} /> Help
           </Link>
+          {user && user.role === "admin" && (
+            <Link to="/admin/records" className="nav-link">
+              Records
+            </Link>
+          )}
         </nav>
       </div>
 
-      <button className="logout-button" onClick={() => navigate("/")}>
+      <button className="logout-button" onClick={() => {
+        localStorage.removeItem("loggedInUser");
+        navigate("/");
+      }}>
         <LogOut size={18} style={{ marginRight: "6px" }} />
         Logout
       </button>
