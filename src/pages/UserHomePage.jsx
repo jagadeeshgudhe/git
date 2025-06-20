@@ -4,7 +4,7 @@ import VirtualAssistanceButton from "../components/chat/VirtualAssistanceButton"
 import { FaFileAlt } from 'react-icons/fa';
 import "../styles/pages/HomePage.css";
 
-const HomePage = () => {
+const UserHomePage = () => {
   const policies = [
     "Leave Management Rule",
     "Captive Allowance",
@@ -25,6 +25,7 @@ const HomePage = () => {
         <div className="welcome-section">
           <h1>WELCOME TO CGI</h1>
           <p className="subtitle">Your HR Assistant - Here to Help</p>
+          <p className="user-role">User Dashboard</p>
         </div>
         <div className="policy-grid">
           {policies.map((policy, index) => (
@@ -42,4 +43,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default UserHomePage; 

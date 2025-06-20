@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import "../../styles/auth/AuthForm.css";
 
 const EyeIcon = ({ open, onClick }) => (
@@ -41,6 +42,7 @@ const AuthForm = () => {
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   useEffect(() => {
     const storedUsers = JSON.parse(localStorage.getItem("registeredUsers")) || [];
@@ -59,13 +61,16 @@ const AuthForm = () => {
       if (rememberMe) {
         localStorage.setItem("rememberedEmail", email);
       }
-      // Store logged-in user for session
-      localStorage.setItem("loggedInUser", JSON.stringify(user));
+      
+      // Use the AuthContext login function
+      login(user);
+      
       alert("Successfully logged in!");
       setEmail("");
       setPassword("");
-      // Redirect based on role
-      if (user.role === "admin") {
+      
+      // Role-based routing
+      if (user.role === 'admin') {
         navigate("/admin");
       } else {
         navigate("/user");
