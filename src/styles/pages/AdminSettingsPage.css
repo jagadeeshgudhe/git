@@ -1,6 +1,6 @@
 .admin-settings-container {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
 }
 
 .settings-main-content {
@@ -34,30 +34,81 @@
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.coming-soon-icon {
-  font-size: 4rem;
-  color: #d1d5db;
-  margin-bottom: 1rem;
-}
-
-.coming-soon h2 {
-  color: #374151;
-  margin-bottom: 1rem;
+/* New Styles for Document Report */
+.documents-report-section h2 {
   font-size: 1.5rem;
+  color: #374151;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0.5rem;
 }
 
-.coming-soon p {
-  color: #6b7280;
-  margin-bottom: 2rem;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-  line-height: 1.6;
+.report-controls {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
-.feature-item svg {
-  color: #8B5CF6; /* A nice purple for settings */
-  font-size: 1.2rem;
+.report-controls label {
+  font-weight: 500;
+  color: #4b5563;
+}
+
+.report-type-dropdown {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  min-width: 200px;
+  font-size: 1rem;
+}
+
+.documents-table-container {
+  overflow-x: auto;
+}
+
+.documents-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.documents-table th,
+.documents-table td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.documents-table th {
+  background-color: #f9fafb;
+  color: #4b5563;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.documents-table tbody tr:hover {
+  background-color: #f3f4f6;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.link-button {
+  background-color: #4f46e5;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: background-color 0.2s;
+}
+
+.link-button:hover {
+  background-color: #4338ca;
 }
 
 /* Responsive Design */
@@ -66,5 +117,10 @@
     flex-direction: column;
     gap: 1rem;
     text-align: center;
+  }
+
+  .report-controls {
+    flex-direction: column;
+    align-items: flex-start;
   }
 } 
